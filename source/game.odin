@@ -29,9 +29,12 @@ package game
 
 import "core:fmt"
 import "core:math/linalg"
+import "core:os"
+import "core:strings"
 import rl "vendor:raylib"
 
 PIXEL_WINDOW_HEIGHT :: 180
+gamepad: i32 = 3
 
 Game_Memory :: struct {
 	player_pos: rl.Vector2,
@@ -60,19 +63,35 @@ ui_camera :: proc() -> rl.Camera2D {
 }
 
 update :: proc() {
+
 	input: rl.Vector2
 
-	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) {
+	but := rl.IsGamepadButtonPressed(gamepad, rl.GamepadButton.RIGHT_FACE_UP)
+
+	x_axis := rl.GetGamepadAxisMovement(gamepad, rl.GamepadAxis.LEFT_X)
+	fmt.printfln("%t", rl.IsGamepadAvailable(gamepad))
+	fmt.println(rl.GetGamepadName(gamepad))
+	fmt.println(fmt.ctprintf("%f", x_axis))
+	y_axis := rl.GetGamepadAxisMovement(gamepad, rl.GamepadAxis.LEFT_Y)
+
+	if rl.IsKeyDown(.UP) || rl.IsKeyDown(.W) || but || y_axis < 0.1 {
 		input.y -= 1
 	}
-	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) {
+	if rl.IsKeyDown(.DOWN) || rl.IsKeyDown(.S) || y_axis > -0.1 {
 		input.y += 1
 	}
-	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) {
+	if rl.IsKeyDown(.LEFT) || rl.IsKeyDown(.A) || x_axis < -0.1 {
 		input.x -= 1
 	}
-	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) {
+	if rl.IsKeyDown(.RIGHT) || rl.IsKeyDown(.D) || x_axis > 0.1 {
 		input.x += 1
+	}
+
+	if rl.IsKeyPressed(.U) && gamepad > 0 {
+		gamepad-= 1
+	}
+	if rl.IsKeyPressed(.I) {
+		gamepad+= 1
 	}
 
 	input = linalg.normalize0(input)
@@ -100,6 +119,8 @@ draw :: proc() {
 	// cleared at the end of the frame by the main application, meaning inside
 	// `main_hot_reload.odin`, `main_release.odin` or `main_web_entry.odin`.
 	rl.DrawText(fmt.ctprintf("some_number: %v\nplayer_pos: %v", g.some_number, g.player_pos), 5, 5, 8, rl.WHITE)
+	rl.DrawText(fmt.ctprint("gamepad: ", gamepad), 5, 25, 8, rl.WHITE)
+
 
 	rl.EndMode2D()
 
@@ -122,6 +143,32 @@ game_init_window :: proc() {
 	rl.SetWindowPosition(200, 200)
 	rl.SetTargetFPS(500)
 	rl.SetExitKey(nil)
+
+	when ODIN_OS != .JS	{
+		game_load_gamepad_mappings()
+	}
+}
+
+game_load_gamepad_mappings :: proc() {
+// Load gamepad mappings from file using core:os
+// You can download the SDL game controller database from:
+// https://github.com/gabomdq/SDL_GameControllerDB
+	if mappings_data, ok := os.read_entire_file("data/gamecontrollerdb.txt"); ok {
+		defer delete(mappings_data)
+
+		// Convert to cstring and set mappings
+		mappings_str := string(mappings_data)
+		result := rl.SetGamepadMappings(strings.clone_to_cstring(mappings_str))
+
+		if result != -1 {
+			fmt.printf("Gamepad mappings loaded successfully (index: %d)\n", result)
+		} else {
+			fmt.println("Warning: Failed to set gamepad mappings")
+		}
+	} else {
+		fmt.println("Warning: Could not load gamepad mappings file (gamecontrollerdb.txt)")
+		fmt.println("Continuing without custom mappings...")
+	}
 }
 
 @(export)
